@@ -24,6 +24,45 @@ def conv1x1(in_planes, out_planes, stride=1):
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 
+
+# Spatial transformer as an Auxiliary Intermediate Layer
+class STN(nn.Module):
+    def __init__(self, cin):
+        self.localization = nn.Sequential(
+            nn.Conv2d(cin, cin//4, kernel_size=7),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True),
+            nn.Conv2d(cin//4, cin//8, kernel_size=5),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(True)
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d((3,3))
+
+        # Regressor for the 3 * 2 affine matrix
+        self.fc_loc = nn.Sequential(
+            nn.Linear(cin//8 * 3 ** 2, 32),
+            nn.ReLU(True),
+            nn.Linear(32, 3 * 2)
+        )
+
+        self.fc_loc[2].weight.data.zero_()
+        self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+
+    def forward(self, x):
+        xs = self.localization(x)
+        xs = self.avgpool(xs)
+        xs = xs.view(-1, 10 * 3 * 3)
+        theta = self.fc_loc(xs)
+        theta = theta.view(-1, 2, 3)
+
+        grid = F.affine_grid(theta, x.size())
+        x = F.grid_sample(x, grid)
+
+        return x
+
+
+
 class BasicBlock(nn.Module):
     expansion = 1
 
@@ -98,7 +137,7 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000, zero_init_residual=False):
+    def __init__(self, block, layers, num_classes=1000, zero_init_residual=False, fc_spatial_size=3, add_stn=False):
         super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
@@ -110,6 +149,14 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+
+        if add_stn:
+            self.stn = STN(128)
+
+
+
+        self.avgpool = nn.AdaptiveAvgPool2d((fc_spatial_size, fc_spatial_size))
+        self.out_features = 512 * fc_spatial_size**2
 
         self.fc = nn.Linear(512 * block.expansion, num_classes)
 
@@ -154,43 +201,42 @@ class ResNet(nn.Module):
 
         x = self.layer1(x)
         x = self.layer2(x)
+
+        if hasattr(self, 'stn'):
+            x = self.stn(x)
+
         x = self.layer3(x)
         x = self.layer4(x)
 
-        imsize = x.shape[-2:]
-        x = F.avg_pool2d(x, imsize, imsize)
+        x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
 
         return x
 
-def resnet18(num_classes, pretrained=False):
+
+
+def resnet(num_classes, pretrained=True, resnet_model='resnet18', add_stn=False):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(BasicBlock, [2, 2, 2, 2])
+    model = ResNet(BasicBlock, [2, 2, 2, 2], add_stn=add_stn)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
+        model.load_state_dict(model_zoo.load_url(model_urls[resnet_model]))
 
-    model.fc = nn.Linear(512, num_classes)
+    model.fc = nn.Linear(model.out_features, num_classes)
 
     #disable gradient everywhere
     for param in model.parameters():
         param.requires_grad = False
+
+    if hasattr(model, 'stn'):
+        for param in model.stn.parameters():
+            param.requires_grad = True
 
     #do not disable in:
     model.fc.weight.requires_grad = True
     model.fc.bias.requires_grad = True
 
     return model
-
-
-class SnakeClassifier(object):
-    def __init__(self, feature_extractor, att_model, classifier):
-        self.feature_extractor = feature_extractor #provide feature maps
-        self.att_model = att_model #extract meaningful features from feature maps using transformers & attention
-        self.classifier = classifier #gather all features & classify
-
-    def forward(self, x):
-        raise Exception("Not Implemented yet")

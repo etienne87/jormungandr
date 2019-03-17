@@ -4,14 +4,28 @@ import sys
 import glob
 import random
 import pickle
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import data_augmentation as da
 import cv2
+from PIL import Image
+import matplotlib.pyplot as plt
 
 # some files are 0bytes...
-def can_load_it(img_name):
-    image = cv2.imread(img_name)
-    return image is not None
+def can_load_it(filename):
+    try:
+        im = Image.open(filename)
+        return True
+    except:
+        return False
+
+def get_img_size(filename):
+    try:
+        im = Image.open(filename)
+        return im.size
+    except:
+        return None
+
 
 def subselect(files):
     good = []
@@ -54,11 +68,52 @@ def split_dataset(directory, train_out, val_out, ratio=0.7):
     pickle.dump(val_dic, open(val_out, "wb"))
 
 
+def get_file_sizes(directory):
+    subdirs = sorted([x[0] for x in os.walk(directory) if x[0] != directory])
+    files = []
+    for dir in subdirs:
+        files += glob.glob(dir + '/*.jpg')
+    sizes = []
+    for file in files:
+        size = get_img_size(file)
+        if size is not None:
+            sizes.append( size )
+    return sizes
+
+
+def plot_file_sizes(directory):
+    sizes = get_file_sizes(directory)
+    areas, ratios = [], []
+    areas = [item[0]*item[1]*1e-3 for item in sizes]
+    ratios = [float(item[0])/item[1] for item in sizes]
+
+    ax1 = plt.subplot(221)
+    ax2 = plt.subplot(222)
+    ax1.hist(areas, label='areas')
+    ax2.hist(ratios, label='ratios')
+    plt.show()
+
 class ResizeCV(object):
-    def __init__(self, imsize):
+    def __init__(self, imsize, keep_ratio=True):
         self.imsize = imsize
+        self.keep_ratio = keep_ratio
+
+    def keep_ratio_resize(self, sample):
+        h, w, c = sample.shape
+        h2, w2 = self.imsize
+
+        if w > h:
+            w3 = w2
+            h3 = w2 * h / w
+        else:
+            h3 = h2
+            w3 = h2 * w / h
+
+        tmp = np.zeros((h2, w2, 3), dtype=np.uint8)
 
     def __call__(self, sample):
+        #respect of aspect ratio
+
         image = cv2.resize(sample, self.imsize, 0, 0, interpolation=cv2.INTER_AREA)
         return image
 
@@ -71,6 +126,7 @@ class RandomDA(object):
         image = da.cv2_apply_transform_image(image, h)
         return image
 
+
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
@@ -82,6 +138,8 @@ class Compose(object):
         for transform in self.transforms:
             x = transform(x)
         return x
+
+
 
 class SnakeDataset(Dataset):
     """Snake Facebook."""
@@ -103,7 +161,7 @@ class SnakeDataset(Dataset):
         self.samples = [samples[i] for i in idx]
 
     def __len__(self):
-        return len(self.samples) // 1000
+        return len(self.samples) // 100
 
     def __getitem__(self, idx):
         label, img_name = self.samples[idx]
@@ -116,7 +174,6 @@ class SnakeDataset(Dataset):
         return (image, label)
 
 
-
 if __name__ == '__main__':
     from torchvision import transforms
 
@@ -124,7 +181,11 @@ if __name__ == '__main__':
     # val_path = os.path.join(sys.argv[1], "val.pkl")
     # split_dataset(sys.argv[1], train_path, val_path)
 
-    input_size = (300, 300)
+    plot_file_sizes(sys.argv[1])
+
+    exit()
+
+    input_size = (600, 600)
     transform = Compose([
         ResizeCV(input_size),
         RandomDA(),
@@ -142,8 +203,8 @@ if __name__ == '__main__':
 
     train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/val.pkl")
     dataset = SnakeDataset(train_path, transform = transform)
-    dataloader = DataLoader(dataset, batch_size=8,
-                            shuffle=True, num_workers=2,
+    dataloader = DataLoader(dataset, batch_size=1,
+                            shuffle=True, num_workers=0,
                             pin_memory=True)
     for x, y in dataloader:
         z = da.unmake_grid((x*255).byte().cpu().numpy())

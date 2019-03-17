@@ -6,17 +6,45 @@ import torch.optim as optim
 import numpy as np
 import torchvision
 from torchvision import transforms
-from models import resnet18
+from models import resnet
 import matplotlib.pyplot as plt
 import time
 import os
 import copy
 import dataset
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, confusion_matrix
+from tensorboardX import SummaryWriter
 
 print("PyTorch Version: ",torch.__version__)
 print("Torchvision Version: ",torchvision.__version__)
 
+
+def draw_cfm(confusion_matrix, writer):
+    fig = plt.Figure(figsize=(7, 7), dpi=320, facecolor='w', edgecolor='k')
+    ax = fig.add_subplot(1, 1, 1)
+    im = ax.imshow(confusion_matrix, cmap='Oranges')
+    classes = [re.sub(r'([a-z](?=[A-Z])|[A-Z](?=[A-Z][a-z]))', r'\1 ', x) for x in labels]
+    classes = ['\n'.join(wrap(l, 40)) for l in classes]
+
+    tick_marks = np.arange(len(classes))
+
+    ax.set_xlabel('Predicted', fontsize=7)
+    ax.set_xticks(tick_marks)
+    c = ax.set_xticklabels(classes, fontsize=4, rotation=-90, ha='center')
+    ax.xaxis.set_label_position('bottom')
+    ax.xaxis.tick_bottom()
+
+    ax.set_ylabel('True Label', fontsize=7)
+    ax.set_yticks(tick_marks)
+    ax.set_yticklabels(classes, fontsize=4, va='center')
+    ax.yaxis.set_label_position('left')
+    ax.yaxis.tick_left()
+
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        ax.text(j, i, format(cm[i, j], 'd') if cm[i, j] != 0 else '.', horizontalalignment="center", fontsize=6,
+                verticalalignment='center', color="black")
+    fig.set_tight_layout(True)
+    writer.add_figure(fig)
 
 #train function
 def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progressive_resize=False):
@@ -27,6 +55,8 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progres
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+
+    writer = SummaryWriter()
 
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
@@ -90,7 +120,11 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progres
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
             y_true, y_pred = np.array(y_true), np.array(y_pred)
             epoch_f1 = f1_score(y_true, y_pred, labels=np.arange(y_true.max()), average='micro')
+            epoch_cfm = confusion_matrix(y_true, y_pred, labels=np.arange(y_true.max()))
 
+            writer.add_scalar(phase + '_loss', epoch_loss, epoch)
+            writer.add_scalar(phase + '_acc', epoch_acc, epoch)
+            writer.add_scalar(phase + '_f1', epoch_f1, epoch)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
             print(phase, ' F1: ', epoch_f1)
@@ -125,7 +159,7 @@ if __name__ == '__main__':
     num_epochs = 15
     feature_extract = True
 
-    model_ft = resnet18(num_classes=num_classes, pretrained=True)
+    model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet18')
     # Data augmentation and normalization for training
     # Just normalization for validation
     mean = [0.485, 0.456, 0.406][::-1]
