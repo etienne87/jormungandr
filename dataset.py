@@ -96,7 +96,6 @@ class SnakeDataset(Dataset):
         skeys = sorted(dic.keys(), key=lambda x:x.split('class-')[1])
         for c, key in enumerate(skeys):
             for file in dic[key]:
-                print(file)
                 samples.append((c,file))
 
         idx = range(len(samples))
@@ -121,9 +120,9 @@ class SnakeDataset(Dataset):
 if __name__ == '__main__':
     from torchvision import transforms
 
-    train_path = os.path.join(sys.argv[1], "train.pkl")
-    val_path = os.path.join(sys.argv[1], "val.pkl")
-    split_dataset(sys.argv[1], train_path, val_path)
+    # train_path = os.path.join(sys.argv[1], "train.pkl")
+    # val_path = os.path.join(sys.argv[1], "val.pkl")
+    # split_dataset(sys.argv[1], train_path, val_path)
 
     input_size = (300, 300)
     transform = Compose([
