@@ -28,6 +28,7 @@ def conv1x1(in_planes, out_planes, stride=1):
 # Spatial transformer as an Auxiliary Intermediate Layer
 class STN(nn.Module):
     def __init__(self, cin):
+        super(STN, self).__init__()
         self.localization = nn.Sequential(
             nn.Conv2d(cin, cin//4, kernel_size=7),
             nn.MaxPool2d(2, stride=2),
@@ -39,9 +40,10 @@ class STN(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool2d((3,3))
 
+        self.loc_out = cin//8
         # Regressor for the 3 * 2 affine matrix
         self.fc_loc = nn.Sequential(
-            nn.Linear(cin//8 * 3 ** 2, 32),
+            nn.Linear(self.loc_out * 3 ** 2, 32),
             nn.ReLU(True),
             nn.Linear(32, 3 * 2)
         )
@@ -52,13 +54,12 @@ class STN(nn.Module):
     def forward(self, x):
         xs = self.localization(x)
         xs = self.avgpool(xs)
-        xs = xs.view(-1, 10 * 3 * 3)
+        xs = xs.view(x.size(0), -1)
         theta = self.fc_loc(xs)
         theta = theta.view(-1, 2, 3)
 
         grid = F.affine_grid(theta, x.size())
         x = F.grid_sample(x, grid)
-
         return x
 
 
@@ -149,12 +150,6 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-
-        if add_stn:
-            self.stn = STN(128)
-
-
-
         self.avgpool = nn.AdaptiveAvgPool2d((fc_spatial_size, fc_spatial_size))
         self.out_features = 512 * fc_spatial_size**2
 
@@ -176,6 +171,9 @@ class ResNet(nn.Module):
                     nn.init.constant_(m.bn3.weight, 0)
                 elif isinstance(m, BasicBlock):
                     nn.init.constant_(m.bn2.weight, 0)
+
+    def add_stn(self):
+        self.stn = STN(128)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -226,6 +224,9 @@ def resnet(num_classes, pretrained=True, resnet_model='resnet18', add_stn=False)
         model.load_state_dict(model_zoo.load_url(model_urls[resnet_model]))
 
     model.fc = nn.Linear(model.out_features, num_classes)
+
+    if add_stn:
+        model.add_stn()
 
     #disable gradient everywhere
     for param in model.parameters():
