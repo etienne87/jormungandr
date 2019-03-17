@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 import time
 import os
 import copy
+from textwrap import wrap
+import re
+import itertools
 import dataset
 from sklearn.metrics import f1_score, confusion_matrix
 from tensorboardX import SummaryWriter
@@ -19,11 +22,11 @@ print("PyTorch Version: ",torch.__version__)
 print("Torchvision Version: ",torchvision.__version__)
 
 
-def draw_cfm(confusion_matrix, writer):
-    fig = plt.Figure(figsize=(7, 7), dpi=320, facecolor='w', edgecolor='k')
+def draw_cfm(cm, writer, labels, phase, global_step):
+    fig = plt.Figure(figsize=(7, 7), dpi=160, facecolor='w', edgecolor='k')
     ax = fig.add_subplot(1, 1, 1)
-    im = ax.imshow(confusion_matrix, cmap='Oranges')
-    classes = [re.sub(r'([a-z](?=[A-Z])|[A-Z](?=[A-Z][a-z]))', r'\1 ', x) for x in labels]
+    im = ax.imshow(cm, cmap='Oranges')
+    classes = [re.sub(r'([a-z](?=[A-Z])|[A-Z](?=[A-Z][a-z]))', r'\1 ', str(x)) for x in labels]
     classes = ['\n'.join(wrap(l, 40)) for l in classes]
 
     tick_marks = np.arange(len(classes))
@@ -44,9 +47,10 @@ def draw_cfm(confusion_matrix, writer):
         ax.text(j, i, format(cm[i, j], 'd') if cm[i, j] != 0 else '.', horizontalalignment="center", fontsize=6,
                 verticalalignment='center', color="black")
     fig.set_tight_layout(True)
-    writer.add_figure(fig)
+    writer.add_figure(phase + '_confusion_matrix', fig, global_step=global_step)
 
-#train function
+
+
 def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progressive_resize=False):
     since = time.time()
 
@@ -119,12 +123,14 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progres
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
             y_true, y_pred = np.array(y_true), np.array(y_pred)
-            epoch_f1 = f1_score(y_true, y_pred, labels=np.arange(y_true.max()), average='micro')
-            epoch_cfm = confusion_matrix(y_true, y_pred, labels=np.arange(y_true.max()))
+            labels = np.arange(y_true.max())
+            epoch_f1 = f1_score(y_true, y_pred, labels=labels, average='micro')
+            epoch_cfm = confusion_matrix(y_true, y_pred, labels=labels)
 
             writer.add_scalar(phase + '_loss', epoch_loss, epoch)
             writer.add_scalar(phase + '_acc', epoch_acc, epoch)
             writer.add_scalar(phase + '_f1', epoch_f1, epoch)
+            draw_cfm(epoch_cfm, writer, labels, phase=phase, global_step=epoch)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
             print(phase, ' F1: ', epoch_f1)
@@ -159,7 +165,7 @@ if __name__ == '__main__':
     num_epochs = 15
     feature_extract = True
 
-    model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet18')
+    model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet18', add_stn=False)
     # Data augmentation and normalization for training
     # Just normalization for validation
     mean = [0.485, 0.456, 0.406][::-1]
@@ -168,7 +174,7 @@ if __name__ == '__main__':
     data_transforms = {'train':
             dataset.Compose([
             dataset.ResizeCV(input_size),
-            #dataset.RandomDA(),
+            dataset.RandomDA(),
             transforms.ToTensor(),
             transforms.Normalize(mean, std)
     ]),
