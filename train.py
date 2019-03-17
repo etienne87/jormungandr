@@ -12,16 +12,18 @@ import time
 import os
 import copy
 import dataset
+from sklearn.metrics import f1_score
 
 print("PyTorch Version: ",torch.__version__)
 print("Torchvision Version: ",torchvision.__version__)
 
 
 #train function
-def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_inception=False):
+def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progressive_resize=False):
     since = time.time()
 
     val_acc_history = []
+    val_f1_history = []
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
@@ -29,6 +31,13 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
+
+        # Progressive resize
+        if progressive_resize:
+            factor = max(0.1, epoch/num_epochs)
+            imsize = (int(600 * factor), int(600 * factor))
+            print('current imsize: ', imsize)
+            dataloaders['train'].dataset.transform[0].imsize = imsize
 
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
@@ -39,6 +48,8 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
 
             running_loss = 0.0
             running_corrects = 0
+            y_true = []
+            y_pred = []
 
             # Iterate over data.
             for iter, (inputs, labels) in enumerate(dataloaders[phase]):
@@ -66,13 +77,23 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += corrects
 
+                #for sklearn global statistics
+                y_true += labels.data.cpu().numpy().tolist()
+                y_pred += preds.data.cpu().numpy().tolist()
+
                 if iter%100 == 0:
-                    print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, loss.item(), float(corrects) / preds.shape[0]))
+                    print('{} Loss: {:.4f} Acc: {:.4f} {:d} / {:d}'.format(phase,
+                                                                loss.item(), float(corrects) / preds.shape[0],
+                                                                iter, len(dataloaders[phase]) ) )
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
+            y_true, y_pred = np.array(y_true), np.array(y_pred)
+            epoch_f1 = f1_score(y_true, y_pred, labels=np.arange(y_true.max()), average='micro')
+
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+            print(phase, ' F1: ', epoch_f1)
 
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
@@ -80,7 +101,7 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
                 best_model_wts = copy.deepcopy(model.state_dict())
             if phase == 'val':
                 val_acc_history.append(epoch_acc)
-
+                val_f1_history.append(epoch_f1)
         print()
 
     time_elapsed = time.time() - since
@@ -104,24 +125,24 @@ if __name__ == '__main__':
     num_epochs = 15
     feature_extract = True
 
-    model_ft = resnet18()
+    model_ft = resnet18(num_classes=num_classes, pretrained=True)
     # Data augmentation and normalization for training
     # Just normalization for validation
-    input_size = (300, 300)
+    mean = [0.485, 0.456, 0.406][::-1]
+    std = [0.229, 0.224, 0.225][::-1]
+    input_size = (600, 600)
     data_transforms = {'train':
-            transforms.Compose([
+            dataset.Compose([
             dataset.ResizeCV(input_size),
-            dataset.RandomDA(),
+            #dataset.RandomDA(),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406],
-                                 [0.229, 0.224, 0.225])
+            transforms.Normalize(mean, std)
     ]),
     'val':
-        transforms.Compose([
+        dataset.Compose([
         dataset.ResizeCV(input_size),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406],
-                             [0.229, 0.224, 0.225])
+        transforms.Normalize(mean, std)
     ])}
 
     print("Initializing Datasets and Dataloaders...")
@@ -164,28 +185,17 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
 
     # Train and evaluate
-    model_ft, hist = train_model(model_ft, dataloaders_dict, criterion, optimizer_ft, num_epochs=num_epochs,
-                                 is_inception=(model_name == "inception"))
-
-
-    scratch_model, _ = initialize_model(model_name, num_classes, feature_extract=False, use_pretrained=False)
-    scratch_model = scratch_model.to(device)
-    scratch_optimizer = optim.SGD(scratch_model.parameters(), lr=0.001, momentum=0.9)
-    scratch_criterion = nn.CrossEntropyLoss()
-    _, scratch_hist = train_model(scratch_model, dataloaders_dict, scratch_criterion, scratch_optimizer,
-                                  num_epochs=num_epochs, is_inception=(model_name == "inception"))
+    model_ft, hist = train_model(model_ft, dataloaders_dict, criterion, optimizer_ft, num_epochs=num_epochs)
 
     ohist = []
     shist = []
 
     ohist = [h.cpu().numpy() for h in hist]
-    shist = [h.cpu().numpy() for h in scratch_hist]
 
     plt.title("Validation Accuracy vs. Number of Training Epochs")
     plt.xlabel("Training Epochs")
     plt.ylabel("Validation Accuracy")
     plt.plot(range(1, num_epochs + 1), ohist, label="Pretrained")
-    plt.plot(range(1, num_epochs + 1), shist, label="Scratch")
     plt.ylim((0, 1.))
     plt.xticks(np.arange(1, num_epochs + 1, 1.0))
     plt.legend()
