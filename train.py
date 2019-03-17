@@ -41,7 +41,7 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
             running_corrects = 0
 
             # Iterate over data.
-            for inputs, labels in dataloaders[phase]:
+            for iter, (inputs, labels) in enumerate(dataloaders[phase]):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
@@ -62,8 +62,12 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, is_ince
                         optimizer.step()
 
                 # statistics
+                corrects = torch.sum(preds == labels.data)
                 running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                running_corrects += corrects
+
+                if iter%100 == 0:
+                    print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, loss.item(), float(corrects) / preds.shape[0]))
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)

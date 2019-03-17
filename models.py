@@ -166,52 +166,15 @@ def resnet18(pretrained=False, **kwargs):
     model = ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet18']))
+
+    #disable learning everywhere
     for param in model.parameters():
         param.requires_grad = False
+
+    #add exception for layer 4 & classifier
+    for param in model.layer4.parameters():
+        param.requires_grad = True
     model.fc.weight.requires_grad = True
     model.fc.bias.requires_grad = True
 
     return model
-
-
-
-
-
-def set_parameter_requires_grad(model, feature_extracting):
-    if feature_extracting:
-        for param in model.parameters():
-            param.requires_grad = False
-
-
-def initialize_model(model_name, num_classes, feature_extract, use_pretrained=True):
-    # Initialize these variables which will be set in this if statement. Each of these
-    #   variables is model specific.
-    model_ft = None
-    input_size = 0
-
-    if model_name == "resnet":
-        """ Resnet18
-        """
-        model_ft = models.resnet18(pretrained=use_pretrained)
-        set_parameter_requires_grad(model_ft, feature_extract)
-        num_ftrs = model_ft.layer4[-1].conv2.weight.shape[0]
-        delattr(model_ft, 'avgpool')
-        model_ft.fc = Classifier(num_ftrs, num_classes)
-
-        input = torch.rand(1, 3, 300, 300)
-        y = model_ft(input)
-
-    elif model_name == "densenet":
-        """ Densenet
-        """
-        model_ft = models.densenet121(pretrained=use_pretrained)
-        set_parameter_requires_grad(model_ft, feature_extract)
-        num_ftrs = model_ft.classifier.in_features
-        model_ft.classifier = nn.Linear(num_ftrs, num_classes)
-        input_size = 224
-
-    else:
-        print("Invalid model name, exiting...")
-        exit()
-
-    return model_ft, input_size
