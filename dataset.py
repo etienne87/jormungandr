@@ -4,9 +4,8 @@ import sys
 import glob
 import random
 import pickle
-import torch
 from torch.utils.data import Dataset, DataLoader
-import data_augmentation as cv_da
+import data_augmentation as da
 import cv2
 
 # some files are 0bytes...
@@ -49,72 +48,106 @@ def split_dataset(directory, train_out, val_out, ratio=0.7):
 
         class_name = os.path.basename(dir)
         train_dic[class_name] = train_files
-        val_dic[class_name] = val_dic
+        val_dic[class_name] = val_files
 
     pickle.dump(train_dic, open(train_out, "wb"))
     pickle.dump(val_dic, open(val_out, "wb"))
 
 
+class ResizeCV(object):
+    def __init__(self, imsize):
+        self.imsize = imsize
+
+    def __call__(self, sample):
+        image = cv2.resize(sample, self.imsize, 0, 0, interpolation=cv2.INTER_AREA)
+        return image
+
+
+class RandomDA(object):
+    def __call__(self, sample):
+        image = sample
+        height, width, c = image.shape
+        h = da.get_random_homography(height=height, width=width, perspective_range=0.00001)
+        image = da.cv2_apply_transform_image(image, h)
+        return image
+
+class Compose(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __getitem__(self, i):
+        return self.transforms[i]
+
+    def __call__(self, x):
+        for transform in self.transforms:
+            x = transform(x)
+        return x
+
 class SnakeDataset(Dataset):
     """Snake Facebook."""
 
-    def __init__(self, pkl_file, imsize=(300, 300), transform=None):
-        self.dic = pickle.load(open(pkl_file,'r'))
+    def __init__(self, pkl_file, transform=None):
+        self.dic = pickle.load(open(pkl_file, 'r'))
         self.get_list(self.dic)
         self.transform = transform
-        self.imsize = imsize #resize to canonical size for now
 
     def get_list(self, dic):
         samples = []
         skeys = sorted(dic.keys(), key=lambda x:x.split('class-')[1])
         for c, key in enumerate(skeys):
             for file in dic[key]:
+                print(file)
                 samples.append((c,file))
 
         idx = range(len(samples))
         random.shuffle(idx)
         self.samples = [samples[i] for i in idx]
-        print('SnakeDataset: ', len(self.samples))
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.samples) // 1000
 
     def __getitem__(self, idx):
         label, img_name = self.samples[idx]
-        try:
-            image = cv2.imread(img_name)
-        except Exception as e:
-            print(e)
+        image = cv2.imread(img_name)
         if image is None:
-            print(img_name, ' is bad')
-        image = cv2.resize(image, self.imsize, 0, 0, interpolation=cv2.INTER_AREA)
-        h = cv_da.get_random_homography(height=self.imsize[1], width=self.imsize[0])
-        image = cv_da.cv2_apply_transform_image(image, h)
-        image = torch.from_numpy(image).permute([2,0,1])
-
+            print('Could not read: ', img_name)
+            assert 0
+        if self.transform is not None:
+            image = self.transform(image)
         return (image, label)
 
 
 
 if __name__ == '__main__':
-
+    from torchvision import transforms
 
     train_path = os.path.join(sys.argv[1], "train.pkl")
     val_path = os.path.join(sys.argv[1], "val.pkl")
     split_dataset(sys.argv[1], train_path, val_path)
 
+    input_size = (300, 300)
+    transform = Compose([
+        ResizeCV(input_size),
+        RandomDA(),
+        transforms.ToTensor(),
+        # transforms.Normalize([0.485, 0.456, 0.406],
+        #                      [0.229, 0.224, 0.225])
+    ])
 
-    dataset = SnakeDataset(train_path)
+    val_transform = Compose([
+        ResizeCV(input_size),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406],
+                             [0.229, 0.224, 0.225])
+    ])
 
-    train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/train.pkl")
-    dataset = SnakeDataset(train_path)
+    train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/val.pkl")
+    dataset = SnakeDataset(train_path, transform = transform)
     dataloader = DataLoader(dataset, batch_size=8,
                             shuffle=True, num_workers=2,
                             pin_memory=True)
-
     for x, y in dataloader:
-
-        z = cv_da.unmake_grid(x.byte().cpu().numpy())
+        z = da.unmake_grid((x*255).byte().cpu().numpy())
 
         cv2.imshow("img", z)
-        cv2.waitKey(5)
+        cv2.waitKey(500)
