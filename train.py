@@ -15,6 +15,7 @@ from textwrap import wrap
 import re
 import itertools
 import dataset
+import utils
 from sklearn.metrics import f1_score, confusion_matrix
 from tensorboardX import SummaryWriter
 
@@ -48,6 +49,16 @@ def draw_cfm(cm, writer, labels, phase, global_step):
                 verticalalignment='center', color="black")
     fig.set_tight_layout(True)
     writer.add_figure(phase + '_confusion_matrix', fig, global_step=global_step)
+
+
+def draw_stn(model, batch, writer):
+    batch2 = model.show_stn(batch)
+
+    #denormalize
+    mean = [0.485, 0.456, 0.406][::-1]
+    std = [0.229, 0.224, 0.225][::-1]
+    batch2 = batch2 * std + mean
+
 
 
 
@@ -165,7 +176,7 @@ if __name__ == '__main__':
     num_epochs = 15
     feature_extract = True
 
-    model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet18', add_stn=True)
+    model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet34', add_stn=True)
     # Data augmentation and normalization for training
     # Just normalization for validation
     mean = [0.485, 0.456, 0.406][::-1]
@@ -226,3 +237,5 @@ if __name__ == '__main__':
 
     # Train and evaluate
     model_ft, hist = train_model(model_ft, dataloaders_dict, criterion, optimizer_ft, num_epochs=num_epochs)
+
+    # Save it in a folder with the name of the experience

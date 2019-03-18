@@ -47,11 +47,12 @@ class STN(nn.Module):
             nn.ReLU(True),
             nn.Linear(32, 3 * 2)
         )
-
+        # initialized to identity in bias + zero transformation
         self.fc_loc[2].weight.data.zero_()
-        self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+        self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0,
+                                                     0, 1, 0], dtype=torch.float))
 
-    def forward(self, x):
+    def compute_grid(self, x):
         xs = self.localization(x)
         xs = self.avgpool(xs)
         xs = xs.view(x.size(0), -1)
@@ -59,6 +60,10 @@ class STN(nn.Module):
         theta = theta.view(-1, 2, 3)
 
         grid = F.affine_grid(theta, x.size())
+        return grid
+
+    def forward(self, x):
+        grid = self.compute_grid(x)
         x = F.grid_sample(x, grid)
         return x
 
@@ -212,6 +217,21 @@ class ResNet(nn.Module):
 
         return x
 
+    def show_stn(self, x0):
+        if hasattr(self, 'stn'):
+            x = self.conv1(x0)
+            x = self.bn1(x)
+            x = self.relu(x)
+            x = self.maxpool(x)
+
+            x = self.layer1(x)
+            x = self.layer2(x)
+
+            grid = self.stn.compute_grid(x)
+            y = F.grid_sample(x0, grid)
+            return y
+        else:
+            return None
 
 
 def resnet(num_classes, pretrained=True, resnet_model='resnet18', add_stn=False):
@@ -219,7 +239,13 @@ def resnet(num_classes, pretrained=True, resnet_model='resnet18', add_stn=False)
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(BasicBlock, [2, 2, 2, 2], add_stn=add_stn)
+    blocks = {'resnet18': [2, 2, 2, 2],
+              'resnet34': [3, 4, 6, 3],
+              'resnet50': [3, 4, 6, 3],
+              'resnet101': [3, 4, 23, 3],
+              'resnet150': [3, 8, 36, 3]
+              }
+    model = ResNet(BasicBlock, blocks[resnet_model], add_stn=add_stn)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls[resnet_model]))
 
@@ -232,11 +258,19 @@ def resnet(num_classes, pretrained=True, resnet_model='resnet18', add_stn=False)
     for param in model.parameters():
         param.requires_grad = False
 
+    #enable in late layers
+    for param in model.layer3.parameters():
+        param.requires_grad = True
+
+    for param in model.layer4.parameters():
+        param.requires_grad = True
+
+    # enable in stn if present
     if hasattr(model, 'stn'):
         for param in model.stn.parameters():
             param.requires_grad = True
 
-    #do not disable in:
+    # enable in classifier
     model.fc.weight.requires_grad = True
     model.fc.bias.requires_grad = True
 
