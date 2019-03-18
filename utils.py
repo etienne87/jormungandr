@@ -1,5 +1,28 @@
 from __future__ import print_function
+import pickle
 import numpy as np
+import torch
+
+class Bunch:
+    def __init__(self, **kwds):
+        self.__dict__.update(kwds)
+
+
+def save_model(model, filename):
+    state = {
+        'net': model.state_dict(),
+        'netobject': pickle.dumps(model),
+    }
+    torch.save(state, filename)
+
+
+def load_model(filename, model=None):
+    checkpoint = torch.load(filename)
+    if model is None:
+        model = pickle.load(checkpoint['netobject'])
+    model.load_state_dict(checkpoint['net'])
+    return model
+
 
 def make_grid(im, thumbsize=80):
     im2 = im.reshape(im.shape[0] / thumbsize, thumbsize, im.shape[1] / thumbsize, thumbsize, 3)

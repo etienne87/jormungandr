@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import division
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -62,7 +63,7 @@ def draw_stn(model, batch, writer):
 
 
 
-def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progressive_resize=False):
+def train_model(model, dataloaders, criterion, optimizer, args):
     since = time.time()
 
     val_acc_history = []
@@ -71,14 +72,14 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progres
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
-    writer = SummaryWriter()
+    writer = SummaryWriter(log_dir='runs/'+args.model_name)
 
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
 
         # Progressive resize
-        if progressive_resize:
+        if args.progressive_resize:
             factor = max(0.1, epoch/num_epochs)
             imsize = (int(600 * factor), int(600 * factor))
             print('current imsize: ', imsize)
@@ -97,7 +98,7 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progres
             y_pred = []
 
             # Iterate over data.
-            for iter, (inputs, labels) in enumerate(dataloaders[phase]):
+            for iter, (inputs, labels, _) in enumerate(dataloaders[phase]):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
@@ -153,7 +154,10 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progres
             if phase == 'val':
                 val_acc_history.append(epoch_acc)
                 val_f1_history.append(epoch_f1)
-        print()
+
+        #Save Model
+        ckpt_file = 'checkpoints/' + args.model_name + '_#' + str(epoch) +  '.pth'
+        utils.save_model(model_ft, ckpt_file)
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
@@ -167,16 +171,21 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, progres
 
 
 if __name__ == '__main__':
-    # Top level data directory. Here we assume the format of the directory conforms
-    #   to the ImageFolder structure
     data_dir = "/home/etienneperot/workspace/datasets/snakes/"
-    model_name = "resnet"
+    args = utils.Bunch()
+
+    args.model_name = sys.argv[1]
+    args.num_epochs = 20
+    args.progressive_resize = False
+
     num_classes = 45
     batch_size = 32
     num_epochs = 15
-    feature_extract = True
+    pretrained = True
+    train_file = 'train.pkl' #change to all.pkl before submission
 
-    model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet34', add_stn=True)
+
+    model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet18', add_stn=False)
     # Data augmentation and normalization for training
     # Just normalization for validation
     mean = [0.485, 0.456, 0.406][::-1]
@@ -198,7 +207,7 @@ if __name__ == '__main__':
 
     print("Initializing Datasets and Dataloaders...")
     root = '/home/etienneperot/workspace/datasets/snakes/train/'
-    file_paths = {'train': os.path.join(root, "train.pkl"),
+    file_paths = {'train': os.path.join(root, train_file),
                   'val': os.path.join(root, "val.pkl")
                   }
 
@@ -219,7 +228,7 @@ if __name__ == '__main__':
 
     params_to_update = model_ft.parameters()
     print("Params to learn:")
-    if feature_extract:
+    if pretrained:
         params_to_update = []
         for name, param in model_ft.named_parameters():
             if param.requires_grad == True:
@@ -236,6 +245,8 @@ if __name__ == '__main__':
     criterion = nn.CrossEntropyLoss()
 
     # Train and evaluate
-    model_ft, hist = train_model(model_ft, dataloaders_dict, criterion, optimizer_ft, num_epochs=num_epochs)
+    model_ft, hist = train_model(model_ft, dataloaders_dict, criterion, optimizer_ft, args)
 
     # Save it in a folder with the name of the experience
+    ckpt_file = 'checkpoints/' + args.model_name + '.pth'
+    utils.save_model(model_ft, ckpt_file)

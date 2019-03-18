@@ -69,6 +69,7 @@ def split_dataset(directory, train_out, val_out, all_out, ratio=0.7):
     pickle.dump(val_dic, open(val_out, "wb"))
     pickle.dump(val_dic, open(all_out, "wb"))
 
+
 def get_file_sizes(directory):
     subdirs = sorted([x[0] for x in os.walk(directory) if x[0] != directory])
     files = []
@@ -80,7 +81,6 @@ def get_file_sizes(directory):
         if size is not None:
             sizes.append( size )
     return sizes
-
 
 def plot_file_sizes(directory):
     sizes = get_file_sizes(directory)
@@ -152,7 +152,7 @@ class SnakeDataset(Dataset):
 
     def get_list(self, dic):
         samples = []
-        skeys = sorted(dic.keys(), key=lambda x:x.split('class-')[1])
+        skeys = sorted(dic.keys(), key=lambda x:int(x.split('class-')[1]))
         for c, key in enumerate(skeys):
             for file in dic[key]:
                 samples.append((c,file))
@@ -162,7 +162,7 @@ class SnakeDataset(Dataset):
         self.samples = [samples[i] for i in idx]
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.samples) // 100
 
     def __getitem__(self, idx):
         label, img_name = self.samples[idx]
@@ -172,7 +172,7 @@ class SnakeDataset(Dataset):
             assert 0
         if self.transform is not None:
             image = self.transform(image)
-        return (image, label)
+        return (image, label, img_name)
 
 
 if __name__ == '__main__':
@@ -183,12 +183,9 @@ if __name__ == '__main__':
     # val_path = os.path.join(sys.argv[1], "val.pkl")
     # all_path = os.path.join(sys.argv[1], "all.pkl")
     # split_dataset(sys.argv[1], train_path, val_path, all_path)
+    # plot_file_sizes(sys.argv[1])
 
-    plot_file_sizes(sys.argv[1])
-
-    exit()
-
-    input_size = (600, 600)
+    input_size = (200, 200)
     transform = Compose([
         ResizeCV(input_size),
         RandomDA(),
@@ -206,11 +203,17 @@ if __name__ == '__main__':
 
     train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/val.pkl")
     dataset = SnakeDataset(train_path, transform = transform)
-    dataloader = DataLoader(dataset, batch_size=1,
+    dataloader = DataLoader(dataset, batch_size=4,
                             shuffle=True, num_workers=0,
                             pin_memory=True)
-    for x, y in dataloader:
-        z = da.unmake_grid((x*255).byte().cpu().numpy())
+    for x, y, names in dataloader:
+        assert(len(y) == len(names))
+        z = unmake_grid((x*255).byte().cpu().numpy())
+
+        # paranoia
+        # idx = random.randint(0, len(names)-1)
+        # img = cv2.imread(names[idx])
+        # cv2.imshow('check'+str(idx), img)
 
         cv2.imshow("img", z)
-        cv2.waitKey(500)
+        cv2.waitKey(0)
