@@ -62,15 +62,15 @@ def affine_compose(tforms):
 
 def get_affine_matrix():
     tforms = []
-    tforms.append(random_rotate(5))
-    tforms.append(random_translate(0.05, 0.05))
+    tforms.append(random_rotate(2))
+    tforms.append(random_translate(-0.1, 0.1))
     tforms.append(random_horizontal_flip())
-    tforms.append(random_zoom((0.75, 1.25)))
+    tforms.append(random_zoom((0.7, 1.3)))
     return affine_compose(tforms)
 
 
-def get_random_homography(height=1, width=1):
-    mat = np.eye(3) + np.random.randn(3, 3) * 0.00001  # subtle deformation
+def get_random_homography(height=1, width=1, perspective_range=1e-6):
+    mat = np.eye(3) #+ np.random.randn(3, 3) * perspective_range
     mat = np.dot(mat, get_affine_matrix())
     mat[0, 2] *= width
     mat[1, 2] *= height
@@ -104,7 +104,7 @@ def cv2_apply_transform_batch(batch, transforms, borderValue=(70, 70, 70)):
 
 class Affine(nn.Module):
     """
-    One Transform to rule them all!!!
+    Data augmentation in Pytorch
     Applies Warping on the images by selecting a random transformation.
 
     """
@@ -168,28 +168,10 @@ class Affine(nn.Module):
         return y
 
 
-def make_grid(im, thumbsize=80):
-    im2 = im.reshape(im.shape[0] / thumbsize, thumbsize, im.shape[1] / thumbsize, thumbsize, 3)
-    im2 = im2.swapaxes(1, 2).reshape(-1, thumbsize, thumbsize, 3)
-    return im2
-
-
-def unmake_grid(batch):
-    batch = np.transpose(batch, [0, 2, 3, 1])
-    batchsize = batch.shape[0]
-    thumbsize = batch.shape[1]
-    channels = batch.shape[-1]
-    nrows = 2 ** ((batchsize.bit_length() - 1) // 2)
-    ncols = batchsize / nrows
-    im = batch.reshape(nrows, ncols, thumbsize, thumbsize, channels)
-    im = im.swapaxes(1, 2)
-    im = im.reshape(nrows * thumbsize, ncols * thumbsize, channels)
-    return im
-
-
 if __name__ == '__main__':
     from dataset import SnakeDataset
     from torch.utils.data import Dataset, DataLoader
+    from utils import unmake_grid
 
 
     train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/train.pkl")

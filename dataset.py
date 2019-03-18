@@ -34,13 +34,13 @@ def subselect(files):
             good.append(file)
     return good
 
-def split_dataset(directory, train_out, val_out, ratio=0.7):
+def split_dataset(directory, train_out, val_out, all_out, ratio=0.7):
     """
     will create 2 csv (train/ val)
     :param path:
     :return:
     """
-    train_dic, val_dic = {}, {}
+    train_dic, val_dic, all_dic = {}, {}, {}
     rank = 0
 
     subdirs = sorted([x[0] for x in os.walk(directory) if x[0] !=directory])
@@ -63,10 +63,11 @@ def split_dataset(directory, train_out, val_out, ratio=0.7):
         class_name = os.path.basename(dir)
         train_dic[class_name] = train_files
         val_dic[class_name] = val_files
+        all_dic[class_name] = files
 
     pickle.dump(train_dic, open(train_out, "wb"))
     pickle.dump(val_dic, open(val_out, "wb"))
-
+    pickle.dump(val_dic, open(all_out, "wb"))
 
 def get_file_sizes(directory):
     subdirs = sorted([x[0] for x in os.walk(directory) if x[0] != directory])
@@ -161,7 +162,7 @@ class SnakeDataset(Dataset):
         self.samples = [samples[i] for i in idx]
 
     def __len__(self):
-        return len(self.samples) // 100
+        return len(self.samples)
 
     def __getitem__(self, idx):
         label, img_name = self.samples[idx]
@@ -176,10 +177,12 @@ class SnakeDataset(Dataset):
 
 if __name__ == '__main__':
     from torchvision import transforms
+    from utils import unmake_grid
 
     # train_path = os.path.join(sys.argv[1], "train.pkl")
     # val_path = os.path.join(sys.argv[1], "val.pkl")
-    # split_dataset(sys.argv[1], train_path, val_path)
+    # all_path = os.path.join(sys.argv[1], "all.pkl")
+    # split_dataset(sys.argv[1], train_path, val_path, all_path)
 
     plot_file_sizes(sys.argv[1])
 
