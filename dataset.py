@@ -26,11 +26,17 @@ class ResizeCV(object):
             h3 = h2
             w3 = h2 * w / h
 
+
+        x1, y1, x2, y2 = w2 / 2 - w3 / 2, h2 / 2 - h3 / 2, w2 / 2 + w3 / 2, h2 / 2 + h3 / 2
         tmp = np.zeros((h2, w2, 3), dtype=np.uint8)
+
+        w4, h4 = x2-x1, y2-y1
+
+        tmp[y1:y2, x1:x2] = cv2.resize(sample, (w4,h4), 0, 0, interpolation=cv2.INTER_CUBIC)
+        return tmp
 
     def __call__(self, sample):
         #respect of aspect ratio
-
         image = cv2.resize(sample, self.imsize, 0, 0, interpolation=cv2.INTER_AREA)
         return image
 
@@ -117,10 +123,10 @@ if __name__ == '__main__':
                              [0.229, 0.224, 0.225])
     ])
 
-    train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/val_and_google.pkl")
+    train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/train.pkl")
     dataset = SnakeDataset(train_path, transform = transform)
     dataloader = DataLoader(dataset, batch_size=4,
-                            shuffle=True, num_workers=2,
+                            shuffle=True, num_workers=0,
                             pin_memory=True)
     for x, y, names in dataloader:
         assert(len(y) == len(names))
@@ -132,4 +138,4 @@ if __name__ == '__main__':
         # cv2.imshow('check'+str(idx), img)
 
         cv2.imshow("img", z)
-        cv2.waitKey(10)
+        cv2.waitKey(0)

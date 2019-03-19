@@ -61,15 +61,15 @@ def affine_compose(tforms):
 
 def get_affine_matrix():
     tforms = []
-    tforms.append(random_rotate(2))
+    tforms.append(random_rotate(30))
     tforms.append(random_translate(-0.1, 0.1))
     tforms.append(random_horizontal_flip())
-    tforms.append(random_zoom((0.7, 1.3)))
+    tforms.append(random_zoom((0.5, 2.0)))
     return affine_compose(tforms)
 
 
-def get_random_homography(height=1, width=1, perspective_range=1e-6):
-    mat = np.eye(3) #+ np.random.randn(3, 3) * perspective_range
+def get_random_homography(height=1, width=1, perspective_range=1e-5):
+    mat = np.eye(3) + np.random.randn(3, 3) * perspective_range
     mat = np.dot(mat, get_affine_matrix())
     mat[0, 2] *= width
     mat[1, 2] *= height
@@ -85,8 +85,10 @@ def cv2_apply_transform_image(image, transform, borderValue=(127, 127, 127)):
     :return:
     """
     h, w = image.shape[0], image.shape[1]
-    image = cv2.warpPerspective(image, transform, (w, h), flags=cv2.INTER_LINEAR, borderValue=borderValue)
+    image = cv2.warpPerspective(image, transform, (w, h),
+                                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101, borderValue=borderValue)
     return image
+
 
 def cv2_apply_transform_batch(batch, transforms, borderValue=(70, 70, 70)):
     """
