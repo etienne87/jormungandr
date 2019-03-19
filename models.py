@@ -259,6 +259,9 @@ def resnet(num_classes, pretrained=True, resnet_model='resnet18', add_stn=False)
         param.requires_grad = False
 
     #enable in late layers
+    for param in model.layer1.parameters():
+        param.requires_grad = True
+
     for param in model.layer2.parameters():
         param.requires_grad = True
 

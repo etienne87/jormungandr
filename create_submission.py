@@ -11,32 +11,6 @@ import torch.nn.functional as F
 import utils
 
 
-def folder_to_pkl(dir, test_out):
-    files = glob.glob(dir + '/*.jpg')
-    dic = {}
-    dic['class-0'] = files
-    pickle.dump(dic, open(test_out, "wb"))
-
-
-def get_map(directory, mapping_filename):
-    #1. get dict species -> class_id
-    idx_to_species = {}
-    with open(mapping_filename, 'rb') as csvfile:
-        reader = csv.DictReader(csvfile, delimiter=',', quotechar='|')
-        for row in reader:
-            idx_to_species[int(row['class_idx'])] = row['original_class']
-    #2. get contiguous_id -> specie
-    nn_idx_to_species = {}
-    subdirs = [x[0] for x in os.walk(directory) if x[0] != directory]
-    subdirs = sorted(subdirs, key=lambda x: int(x.split('class-')[1]))
-    for c, subdir in enumerate(subdirs):
-        class_id = int(subdir.split('class-')[1])
-        specie = idx_to_species[class_id]
-        nn_idx_to_species[c] = specie
-
-    assert len(idx_to_species) == len(nn_idx_to_species)
-    return nn_idx_to_species
-
 def run_dataset(file_path, checkpoint, idx_to_species, cuda):
     # Load Data
     input_size = (600, 600)
@@ -80,11 +54,11 @@ def run_dataset(file_path, checkpoint, idx_to_species, cuda):
 if __name__ == '__main__':
     directory = '/home/etienneperot/workspace/datasets/snakes/train/'
     mapping_filename = 'data/class_id_mapping.csv'
-    idx_to_class_name = get_map(directory, mapping_filename)
+    idx_to_class_name = utils.get_map(directory, mapping_filename)
 
     dir_test = '/home/etienneperot/workspace/datasets/snakes/round1_test/'
     test_out = dir_test + 'test.pkl'
-    #folder_to_pkl(dir_test + 'round1/', test_out)
+    #utils.folder_to_pkl(dir_test + 'round1/', test_out)
 
     checkpoint = 'checkpoints/dummy_resnet18.pth'
     run_dataset(test_out, checkpoint, idx_to_class_name, cuda=True)

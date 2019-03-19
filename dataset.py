@@ -8,91 +8,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import data_augmentation as da
 import cv2
-from PIL import Image
-import matplotlib.pyplot as plt
 
-# some files are 0bytes...
-def can_load_it(filename):
-    try:
-        im = Image.open(filename)
-        return True
-    except:
-        return False
-
-def get_img_size(filename):
-    try:
-        im = Image.open(filename)
-        return im.size
-    except:
-        return None
-
-
-def subselect(files):
-    good = []
-    for file in files:
-        if can_load_it(file):
-            good.append(file)
-    return good
-
-def split_dataset(directory, train_out, val_out, all_out, ratio=0.7):
-    """
-    will create 2 csv (train/ val)
-    :param path:
-    :return:
-    """
-    train_dic, val_dic, all_dic = {}, {}, {}
-    rank = 0
-
-    subdirs = sorted([x[0] for x in os.walk(directory) if x[0] !=directory])
-
-    for dir in subdirs:
-        files = glob.glob(dir + '/*.jpg')
-        files = subselect(files)
-        print(os.path.basename(dir), ': ', len(files))
-        idx = range(len(files))
-        random.shuffle(idx)
-        cut = int(ratio*len(files))
-
-        train_files = [files[i] for i in idx[:cut]]
-        val_files = [files[i] for i in idx[cut:]]
-
-        # stupid check
-        if len(set(train_files).intersection(val_files)) > 0:
-            assert 0
-
-        class_name = os.path.basename(dir)
-        train_dic[class_name] = train_files
-        val_dic[class_name] = val_files
-        all_dic[class_name] = files
-
-    pickle.dump(train_dic, open(train_out, "wb"))
-    pickle.dump(val_dic, open(val_out, "wb"))
-    pickle.dump(val_dic, open(all_out, "wb"))
-
-
-def get_file_sizes(directory):
-    subdirs = sorted([x[0] for x in os.walk(directory) if x[0] != directory])
-    files = []
-    for dir in subdirs:
-        files += glob.glob(dir + '/*.jpg')
-    sizes = []
-    for file in files:
-        size = get_img_size(file)
-        if size is not None:
-            sizes.append( size )
-    return sizes
-
-def plot_file_sizes(directory):
-    sizes = get_file_sizes(directory)
-    areas, ratios = [], []
-    areas = [item[0]*item[1]*1e-3 for item in sizes]
-    ratios = [float(item[0])/item[1] for item in sizes]
-
-    ax1 = plt.subplot(221)
-    ax2 = plt.subplot(222)
-    ax1.hist(areas, label='areas')
-    ax2.hist(ratios, label='ratios')
-    plt.show()
 
 class ResizeCV(object):
     def __init__(self, imsize, keep_ratio=True):
@@ -141,7 +57,6 @@ class Compose(object):
         return x
 
 
-
 class SnakeDataset(Dataset):
     """Snake Facebook."""
 
@@ -162,7 +77,7 @@ class SnakeDataset(Dataset):
         self.samples = [samples[i] for i in idx]
 
     def __len__(self):
-        return len(self.samples) // 100
+        return len(self.samples)
 
     def __getitem__(self, idx):
         label, img_name = self.samples[idx]
