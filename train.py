@@ -61,6 +61,47 @@ def draw_stn(model, batch, writer):
     batch2 = batch2 * std + mean
 
 
+def val_model(model, dataloader, criterion):
+    phase = 'val'
+    model.eval()  # Set model to evaluate mode
+
+    running_loss = 0.0
+    running_corrects = 0
+    y_true = []
+    y_pred = []
+
+    # Iterate over data.
+    for iter, (inputs, labels, _) in enumerate(dataloader):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+
+        # forward
+        # track history if only in train
+        with torch.set_grad_enabled(phase == 'train'):
+            # Get model outputs and calculate loss
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            _, preds = torch.max(outputs, 1)
+
+        # statistics
+        corrects = torch.sum(preds == labels.data)
+        running_loss += loss.item() * inputs.size(0)
+        running_corrects += corrects
+
+        # for sklearn global statistics
+        y_true += labels.data.cpu().numpy().tolist()
+        y_pred += preds.data.cpu().numpy().tolist()
+
+
+    epoch_loss = running_loss / len(dataloader.dataset)
+    epoch_acc = running_corrects.double() / len(dataloader.dataset)
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    labels = np.arange(y_true.max())
+    epoch_f1 = f1_score(y_true, y_pred, labels=labels, average='micro')
+
+    print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
+    print(phase, ' F1: ', epoch_f1)
 
 
 def train_model(model, dataloaders, criterion, optimizer, args):
@@ -182,10 +223,15 @@ if __name__ == '__main__':
     batch_size = 32
     num_epochs = 15
     pretrained = True
-    train_file = 'train.pkl' #change to all.pkl before submission
-
+    train_file = 'train_and_google.pkl' #change to all.pkl before submission
+    resume = True
+    checkpoint_file = 'checkpoints/resnet18_finetune_all.pth'
 
     model_ft = resnet(num_classes=num_classes, pretrained=True, resnet_model='resnet18', add_stn=False)
+
+    if resume:
+        utils.load_model(checkpoint_file, model_ft)
+
     # Data augmentation and normalization for training
     # Just normalization for validation
     mean = [0.485, 0.456, 0.406][::-1]
@@ -239,10 +285,14 @@ if __name__ == '__main__':
             if param.requires_grad == True:
                 print("\t", name)
 
+
+
     # Observe that all parameters are being optimized
     optimizer_ft = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
 
     criterion = nn.CrossEntropyLoss()
+
+    # val_model(model_ft, dataloaders_dict['val'], criterion)
 
     # Train and evaluate
     model_ft, hist = train_model(model_ft, dataloaders_dict, criterion, optimizer_ft, args)

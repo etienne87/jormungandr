@@ -12,9 +12,8 @@ import cv2
 def random_rotate(rotation_range):
     degree = random.uniform(-rotation_range, rotation_range)
     theta = math.pi / 180 * degree
-    rotation_matrix = np.array([[math.cos(theta), -math.sin(theta), 0],
-                                [math.sin(theta), math.cos(theta), 0],
-                                [0, 0, 1]])
+    rotation_matrix = np.eye(3)
+    rotation_matrix[:2] = cv2.getRotationMatrix2D((0.5,0.5), degree, 1.0)
     return rotation_matrix
 
 

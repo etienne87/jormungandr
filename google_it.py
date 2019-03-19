@@ -20,9 +20,15 @@ def get_pickle(directory, species_to_idx, out_filename):
     subdirs = sorted([x[0] for x in os.walk(directory) if x[0] != directory])
     dic = {}
     for subdir in subdirs:
-        specie = os.path.dirname(subdir)
+        specie = os.path.basename(subdir)
         idx = species_to_idx[specie]
-        dic[idx] = glob.glob(subdir + '/*.jpg')
+        idx = 'class-'+str(idx)
+        files = glob.glob(subdir + '/*.jpg')
+        out = []
+        for item in files:
+            if utils.can_load_it(item):
+                out.append(item)
+        dic[idx] = out
     pickle.dump(dic, open(out_filename, "wb"))
 
 
@@ -32,4 +38,15 @@ if __name__ == '__main__':
 
     # create_googled_dataset(species_to_idx)
     get_pickle(output_directory, species_to_idx, output_directory + 'google.pkl')
+
+
+    output_directory = '/home/etienneperot/workspace/datasets/snakes/train/'
+    pkl1 = output_directory + 'google.pkl'
+    pkl2 = output_directory + 'train.pkl'
+    pkl3 = output_directory + 'val.pkl'
+    pkl_merge_1 = output_directory + 'train_and_google.pkl'
+    pkl_merge_2 = output_directory + 'val_and_google.pkl'
+
+    utils.merge_pickle(pkl1, pkl2, pkl_merge_1)
+    utils.merge_pickle(pkl1, pkl3, pkl_merge_2)
 

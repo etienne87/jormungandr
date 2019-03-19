@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from PIL import Image
 import matplotlib.pyplot as plt
+import cv2
 
 class Bunch:
     def __init__(self, **kwds):
@@ -46,6 +47,12 @@ def unmake_grid(batch):
     im = im.reshape(nrows * thumbsize, ncols * thumbsize, channels)
     return im
 
+def cv_can_load_it(filename):
+    try:
+        im = cv2.imread(filename)
+        return True
+    except:
+        return False
 
 # some files are 0bytes...
 def can_load_it(filename):
@@ -139,7 +146,12 @@ def folder_to_pkl(dir, test_out):
 
 
 def merge_pickle(pkl1, pkl2, outfilename):
-    pass
+    dic1 = pickle.load(open(pkl1, 'r'))
+    dic2 = pickle.load(open(pkl2, 'r'))
+    dic = dic1.copy()
+    dic.update(dic2)
+    pickle.dump(dic, open(outfilename, "wb"))
+
 
 def get_species(mapping_filename):
     species_to_idx = {}

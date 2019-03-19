@@ -62,6 +62,7 @@ class SnakeDataset(Dataset):
 
     def __init__(self, pkl_file, transform=None):
         self.dic = pickle.load(open(pkl_file, 'r'))
+        assert self.dic is not None
         self.get_list(self.dic)
         self.transform = transform
 
@@ -116,10 +117,10 @@ if __name__ == '__main__':
                              [0.229, 0.224, 0.225])
     ])
 
-    train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/val.pkl")
+    train_path = os.path.join("/home/etienneperot/workspace/datasets/snakes/train/val_and_google.pkl")
     dataset = SnakeDataset(train_path, transform = transform)
     dataloader = DataLoader(dataset, batch_size=4,
-                            shuffle=True, num_workers=0,
+                            shuffle=True, num_workers=2,
                             pin_memory=True)
     for x, y, names in dataloader:
         assert(len(y) == len(names))
@@ -131,4 +132,4 @@ if __name__ == '__main__':
         # cv2.imshow('check'+str(idx), img)
 
         cv2.imshow("img", z)
-        cv2.waitKey(0)
+        cv2.waitKey(10)
